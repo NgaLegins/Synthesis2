@@ -1,101 +1,201 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Visual Audio Reactive</title>
-  <script src="https://unpkg.com/hydra-synth"></script>
-  <style>
-    body { margin: 0; overflow: hidden; background: black; cursor: pointer; }
-    canvas { width: 100%; height: 100%; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOU ARE ONE - Hydra Visual</title>
     
-    #overlay {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85); color: white; display: flex;
-      flex-direction: column; align-items: center; justify-content: center;
-      font-family: monospace; z-index: 10; text-align: center;
-    }
-    h1 { font-size: 20px; text-transform: uppercase; margin-bottom: 10px; }
-    p { color: #aaa; max-width: 400px; line-height: 1.5; }
-    #status { color: #ff5555; margin-top: 20px; font-weight: bold; }
-  </style>
+    <script src="https://unpkg.com/hydra-synth"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            overflow: hidden;
+            font-family: 'Bebas Neue', sans-serif;
+        }
+
+        /* Canvas dove gira Hydra */
+        #hydra-canvas {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            z-index: 1;
+        }
+
+        /* Il testo sovrapposto */
+        #overlay-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 15vw; /* Grandezza responsive */
+            z-index: 10;
+            pointer-events: none; /* Permette di cliccare attraverso */
+            opacity: 0; /* Invisibile di base */
+            transition: opacity 0.1s; /* Dissolvenza rapidissima */
+            text-align: center;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+            letter-spacing: 5px;
+        }
+
+        /* Pulsante iniziale per attivare l'audio */
+        #start-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            padding: 20px 40px;
+            font-size: 24px;
+            background: white;
+            color: black;
+            border: none;
+            cursor: pointer;
+            font-family: 'Bebas Neue', sans-serif;
+            text-transform: uppercase;
+        }
+    </style>
 </head>
 <body>
 
-  <div id="overlay">
-    <h1>Clicca per avviare</h1>
-    <p>IMPORTANTE: Se apri questo file con doppio click, l'audio NON funzionerà. Devi usare un Local Server o caricarlo online.</p>
-    <div id="status">In attesa di input...</div>
-  </div>
+    <button id="start-btn">Clicca per iniziare</button>
 
-  <script>
-    // 1. Inizializzazione Hydra
-    const hydra = new Hydra({
-      detectAudio: true,
-      enableStreamCapture: false,
-      width: window.innerWidth,
-      height: window.innerHeight
-    });
+    <div id="overlay-text">YOU ARE ONE</div>
 
-    // 2. Immagine (tramite Proxy per evitare schermo nero)
-    const originalUrl = "https://github.com/NgaLegins/Synthesis2/blob/main/Screenshot%202026-01-20%20alle%2016.27.00.png?raw=true";
-    const imgUrl = "https://images.weserv.nl/?url=" + encodeURIComponent(originalUrl);
-    s0.initImage(imgUrl);
+    <canvas id="hydra-canvas"></canvas>
 
-    // 3. Logica Visual
-    var boost = 4;
+    <script>
+        // --- 1. SETUP HYDRA ---
+        const hydra = new Hydra({
+            canvas: document.getElementById("hydra-canvas"),
+            detectAudio: false
+        });
 
-    let audioGlitch = src(s0)
-      .modulateScale(noise(50, 0.5), () => (a.fft[0]*boost) * 2)
-      .pixelate(
-         () => 500 - (a.fft[0]*boost)*400, 
-         () => 500 - (a.fft[0]*boost)*400
-      )
-      .colorama(() => (a.fft[1]*boost) * 0.5)
-      .invert(() => (a.fft[0]*boost) > 0.4 ? 1 : 0)
-      .saturate(() => 1 + (a.fft[0]*boost)*5)
-      .contrast(1.5)
-      .kaleid(() => 1 + (a.fft[0]*boost));
+        // --- 2. SETUP AUDIO ---
+        let audioCtx;
+        let masterGain;
+        let osc1, osc2;
+        let isAudioStarted = false;
 
-    let cursoreAudio = shape(4, () => 0.2 + (a.fft[0]*boost)*0.3, 0.1)
-      .rotate(() => time * 2 + (a.fft[0]*boost))
-      .modulate(noise(20), () => (a.fft[0]*boost) * 0.5)
-      .pixelate(50, 50)
-      .scroll(
-          () => (mouse.x / window.innerWidth - 0.5) * -1,
-          () => (mouse.y / window.innerHeight - 0.5) * -1
-      );
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0; // Parte muto
+            masterGain.connect(audioCtx.destination);
 
-    src(s0)
-      .layer(audioGlitch.mask(cursoreAudio))
-      .out(o0);
+            // Oscillatore 1: Onda a dente di sega (aspra)
+            osc1 = audioCtx.createOscillator();
+            osc1.type = 'sawtooth';
+            osc1.frequency.value = 100; // Tono basso
+            osc1.connect(masterGain);
+            osc1.start();
 
-    // 4. Gestione Avvio Audio
-    const overlay = document.getElementById('overlay');
-    const statusText = document.getElementById('status');
+            // Oscillatore 2: Onda quadra (potente) leggermente scordata
+            osc2 = audioCtx.createOscillator();
+            osc2.type = 'square';
+            osc2.frequency.value = 105; // 5Hz di differenza per creare "battimento" fastidioso
+            osc2.connect(masterGain);
+            osc2.start();
 
-    overlay.addEventListener('click', async () => {
-      statusText.innerText = "Richiesta microfono in corso...";
-      statusText.style.color = "yellow";
+            isAudioStarted = true;
+        }
 
-      try {
-        // Forza l'avvio dell'audio
-        a.show();
-        a.setBins(6);
-        a.settings[0].cutoff = 1;
+        // Gestione Click Iniziale
+        const btn = document.getElementById('start-btn');
+        btn.addEventListener('click', () => {
+            initAudio();
+            btn.style.display = 'none'; // Nasconde il bottone
+            // Reset del tempo Hydra per sincronizzare l'inizio col click
+            // (opzionale, ma aiuta la precisione)
+        });
 
-        // Piccola attesa per verificare se l'audio parte
-        setTimeout(() => {
-          overlay.style.opacity = 0;
-          setTimeout(() => overlay.style.display = 'none', 500);
-          console.log("Audio avviato con successo.");
-        }, 500);
+        // --- 3. LOGICA SINCRONIZZAZIONE ---
+        const speed = 0.8; // Velocità animazione
+        const textElement = document.getElementById('overlay-text');
 
-      } catch (e) {
-        console.error(e);
-        statusText.innerText = "ERRORE: Impossibile accedere al microfono. Stai usando HTTPS o Localhost?";
-      }
-    });
-  </script>
+        // Funzione per calcolare la distanza
+        // Math.sin va da -1 a 1. 
+        // Math.abs lo fa andare da 1 -> 0 -> 1.
+        // 0 significa "centro" (tocco), 1 significa "lati".
+        function getSeparation() {
+            return Math.abs(Math.sin(time * speed));
+        }
+
+        // Funzione Update personalizzata
+        update = () => {
+            const separation = getSeparation();
+            
+            // Soglia di contatto: se la separazione è minima (< 0.05), si toccano
+            // Moltiplichiamo per un fattore per gestire lo spazio visivo
+            const isTouching = separation < 0.08;
+
+            if (isTouching) {
+                // --- CONTATTO ---
+                textElement.style.opacity = 1; // Mostra testo
+                
+                if(isAudioStarted) {
+                    // Volume alto istantaneo
+                    masterGain.gain.setTargetAtTime(0.4, audioCtx.currentTime, 0.01);
+                    
+                    // Modulazione "Urlo" (Glitch frequenza)
+                    // Cambia frequenza a caso per fare "GRRRR"
+                    osc1.frequency.setValueAtTime(100 + Math.random() * 200, audioCtx.currentTime);
+                    osc2.frequency.setValueAtTime(105 + Math.random() * 200, audioCtx.currentTime);
+                }
+
+                // Leggera vibrazione del testo CSS
+                textElement.style.transform = `translate(-50%, -50%) rotate(${Math.random()*4 - 2}deg)`;
+
+            } else {
+                // --- DISTACCO ---
+                textElement.style.opacity = 0; // Nascondi testo
+                
+                if(isAudioStarted) {
+                    // Volume a zero rapido
+                    masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+                    // Reset frequenze
+                    osc1.frequency.setValueAtTime(100, audioCtx.currentTime);
+                    osc2.frequency.setValueAtTime(105, audioCtx.currentTime);
+                }
+            }
+        }
+
+        // --- 4. VISUALS HYDRA ---
+        // Nota: Dentro Hydra standalone, usiamo le funzioni globali
+        
+        solid(0, 0, 0) // Sfondo Nero
+        .add(
+            // Cerchio Giallo SINISTRO
+            shape(100, 0.23)
+            .color(1, 0.9, 0)
+            // scrollX: parte da sinistra (-0.8) e va verso 0 basandosi sulla separazione
+            .scrollX(() => -1 * (getSeparation() * 0.8)) 
+        )
+        .add(
+            // Cerchio Giallo DESTRO
+            shape(100, 0.23)
+            .color(1, 0.9, 0)
+            // scrollX: parte da destra (0.8) e va verso 0
+            .scrollX(() => (getSeparation() * 0.8))
+        )
+        // Aggiungiamo un leggero feedback visivo quando si toccano (schermo vibra)
+        .modulate(
+            noise(10), 
+            () => (getSeparation() < 0.08) ? 0.05 : 0
+        )
+        .out()
+
+    </script>
 </body>
 </html>

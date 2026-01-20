@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydra Visual Audio Reactive</title>
+  <script src="https://unpkg.com/hydra-synth"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; cursor: pointer; }
+    canvas { width: 100%; height: 100%; }
+    
+    #overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); color: white; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      font-family: monospace; z-index: 10; text-align: center;
+    }
+    h1 { font-size: 20px; text-transform: uppercase; margin-bottom: 10px; }
+    p { color: #aaa; max-width: 400px; line-height: 1.5; }
+    #status { color: #ff5555; margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div id="overlay">
+    <h1>Clicca per avviare</h1>
+    <p>IMPORTANTE: Se apri questo file con doppio click, l'audio NON funzionerà. Devi usare un Local Server o caricarlo online.</p>
+    <div id="status">In attesa di input...</div>
+  </div>
+
+  <script>
+    // 1. Inizializzazione Hydra
+    const hydra = new Hydra({
+      detectAudio: true,
+      enableStreamCapture: false,
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+
+    // 2. Immagine (tramite Proxy per evitare schermo nero)
+    const originalUrl = "https://github.com/NgaLegins/Synthesis2/blob/main/Screenshot%202026-01-20%20alle%2016.27.00.png?raw=true";
+    const imgUrl = "https://images.weserv.nl/?url=" + encodeURIComponent(originalUrl);
+    s0.initImage(imgUrl);
+
+    // 3. Logica Visual
+    var boost = 4;
+
+    let audioGlitch = src(s0)
+      .modulateScale(noise(50, 0.5), () => (a.fft[0]*boost) * 2)
+      .pixelate(
+         () => 500 - (a.fft[0]*boost)*400, 
+         () => 500 - (a.fft[0]*boost)*400
+      )
+      .colorama(() => (a.fft[1]*boost) * 0.5)
+      .invert(() => (a.fft[0]*boost) > 0.4 ? 1 : 0)
+      .saturate(() => 1 + (a.fft[0]*boost)*5)
+      .contrast(1.5)
+      .kaleid(() => 1 + (a.fft[0]*boost));
+
+    let cursoreAudio = shape(4, () => 0.2 + (a.fft[0]*boost)*0.3, 0.1)
+      .rotate(() => time * 2 + (a.fft[0]*boost))
+      .modulate(noise(20), () => (a.fft[0]*boost) * 0.5)
+      .pixelate(50, 50)
+      .scroll(
+          () => (mouse.x / window.innerWidth - 0.5) * -1,
+          () => (mouse.y / window.innerHeight - 0.5) * -1
+      );
+
+    src(s0)
+      .layer(audioGlitch.mask(cursoreAudio))
+      .out(o0);
+
+    // 4. Gestione Avvio Audio
+    const overlay = document.getElementById('overlay');
+    const statusText = document.getElementById('status');
+
+    overlay.addEventListener('click', async () => {
+      statusText.innerText = "Richiesta microfono in corso...";
+      statusText.style.color = "yellow";
+
+      try {
+        // Forza l'avvio dell'audio
+        a.show();
+        a.setBins(6);
+        a.settings[0].cutoff = 1;
+
+        // Piccola attesa per verificare se l'audio parte
+        setTimeout(() => {
+          overlay.style.opacity = 0;
+          setTimeout(() => overlay.style.display = 'none', 500);
+          console.log("Audio avviato con successo.");
+        }, 500);
+
+      } catch (e) {
+        console.error(e);
+        statusText.innerText = "ERRORE: Impossibile accedere al microfono. Stai usando HTTPS o Localhost?";
+      }
+    });
+  </script>
+</body>
+</html>

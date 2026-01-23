@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>The Substance - Hydra HTML</title>
+  <title>7 Days - Hydra High Res</title>
   <style>
     body {
       margin: 0;
@@ -10,7 +10,7 @@
       width: 100%;
       height: 100vh;
       background-color: black;
-      overflow: hidden; /* Nasconde le scrollbar */
+      overflow: hidden;
       font-family: Helvetica, Arial, sans-serif;
     }
 
@@ -21,9 +21,10 @@
       width: 100%;
       height: 100%;
       z-index: 1;
+      /* Assicura che il rendering CSS sia fluido */
+      image-rendering: -webkit-optimize-contrast;
     }
 
-    /* Stile per il bottone di avvio */
     #overlay {
       position: absolute;
       top: 0;
@@ -42,16 +43,19 @@
     }
 
     h1 {
-      font-size: 2rem;
+      font-size: 3rem; /* Più grande */
       margin-bottom: 20px;
       text-transform: uppercase;
-      letter-spacing: 5px;
+      letter-spacing: 8px;
+      font-weight: bold;
     }
 
     p {
       color: #ffff00; /* Giallo Substance */
-      font-size: 1rem;
+      font-size: 1.2rem;
       animation: blink 1s infinite;
+      letter-spacing: 2px;
+      font-weight: bold;
     }
 
     @keyframes blink {
@@ -67,38 +71,48 @@
   <canvas id="hydra-canvas"></canvas>
 
   <div id="overlay">
-    <h1>The Substance</h1>
-    <p>[ CLICK TO INITIALIZE ]</p>
+    <h1>7 Days</h1>
+    <p>[ CLICK TO ACTIVE ]</p>
   </div>
 
   <script>
     const overlay = document.getElementById('overlay');
     
-    // Al click, avviamo tutto
     overlay.addEventListener('click', () => {
-      // 1. Nascondi overlay
       overlay.style.opacity = 0;
       setTimeout(() => overlay.style.display = 'none', 500);
 
-      // 2. Inizializza Hydra
+      // --- INIZIALIZZAZIONE AD ALTA RISOLUZIONE ---
+      const hydraCanvas = document.getElementById("hydra-canvas");
+      
+      // Calcoliamo la larghezza e altezza reali basate sui pixel fisici del monitor
+      // Questo risolve il problema dello "sgranato" su schermi moderni
+      const width = window.innerWidth * window.devicePixelRatio;
+      const height = window.innerHeight * window.devicePixelRatio;
+
       const hydra = new Hydra({
-        canvas: document.getElementById("hydra-canvas"),
-        detectAudio: false, // Gestiamo l'audio manualmente
+        canvas: hydraCanvas,
+        detectAudio: false,
         enableStreamCapture: false,
+        width: width,   // Imposta larghezza interna reale
+        height: height, // Imposta altezza interna reale
       });
 
-      // 3. Eseguiamo il tuo script
+      // Gestione del ridimensionamento finestra per mantenere la nitidezza
+      window.addEventListener('resize', () => {
+        setResolution(
+          window.innerWidth * window.devicePixelRatio, 
+          window.innerHeight * window.devicePixelRatio
+        );
+      });
+
       runMySketch();
     });
 
     function runMySketch() {
       // --- 1. SETUP AUDIO ---
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Importante: riattivare il contesto se è sospeso (succede spesso)
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
+      if (ctx.state === 'suspended') ctx.resume();
 
       const masterGain = ctx.createGain();
       masterGain.gain.value = 0.4;
@@ -109,8 +123,6 @@
         const gain = ctx.createGain();
         osc.type = 'sawtooth'; 
         osc.frequency.setValueAtTime(pitch, ctx.currentTime);
-        
-        // Slide del pitch (Drop)
         osc.frequency.exponentialRampToValueAtTime(pitch * 0.2, ctx.currentTime + duration);
 
         gain.gain.setValueAtTime(0.6, ctx.currentTime);
@@ -122,16 +134,16 @@
         osc.stop(ctx.currentTime + duration + 0.1);
       }
 
-      // --- 2. SETUP TESTO ---
+      // --- 2. SETUP TESTO (Ultra Alta Risoluzione) ---
       const textCanvas = document.createElement('canvas');
       const textCtx = textCanvas.getContext('2d');
 
-      // Risoluzione canvas
-      textCanvas.width = 2000;
-      textCanvas.height = 2000;
+      // Risoluzione canvas testo molto alta (4k) per evitare aliasing
+      textCanvas.width = 4096;
+      textCanvas.height = 4096;
 
-      // Font style
-      textCtx.font = 'bold 100px Helvetica, Arial, sans-serif'; 
+      // Font scalato di conseguenza
+      textCtx.font = 'bold 200px Helvetica, Arial, sans-serif'; 
       textCtx.textAlign = 'center';
       textCtx.fillStyle = 'white';
       textCtx.textBaseline = 'middle'; 
@@ -143,18 +155,15 @@
         textCtx.fillText(msg, textCanvas.width / 2, textCanvas.height / 2);
       }
 
-      // Inizializza sorgente s0 con il canvas
       s0.init({ src: textCanvas });
 
       // --- 3. LOGICA DI TEMPO ---
       const holdDuration = 2.0; 
-      const moveDuration = 3.0; // Come da tuo codice (più lento del precedente)
+      const moveDuration = 3.0; 
       const totalCycle = holdDuration + moveDuration; 
 
       const getPosition = () => {
-        // 'time' è una variabile globale di Hydra
         let cycleTime = time % totalCycle; 
-        
         if (cycleTime < holdDuration) {
           return 0;
         } else {
@@ -163,8 +172,6 @@
         }
       }
 
-      // Funzione update globale di Hydra
-      // Nota: in HTML standalone "update" va assegnato a window o ridefinito
       window.update = () => {
         let cycleTime = time % totalCycle;
         let state = cycleTime < holdDuration ? "united" : "divided";
@@ -181,19 +188,20 @@
         }
       }
 
-      // --- 4. VISUALS (Hydra Code) ---
+      // --- 4. VISUALS ---
+      // shape(lati, raggio, smoothing)
+      // smoothing a 0.001 con alta risoluzione crea bordi molto netti
       shape(100, 0.45, 0.001)
         .scrollX(() => getPosition() * -1) 
         .add(
           shape(100, 0.45, 0.001)
           .scrollX(() => getPosition()) 
         )
-        // Effetto Metaball
+        // Thresh regolato per la nuova risoluzione
         .thresh(0.5, 0.15) 
-        // Coloring
         .color(1, 0.9, 0) 
-        .modulate(noise(3, 0.1), 0.03) 
-        // Sovrapposizione Testo
+        // Noise leggermente ridotto per pulizia visiva
+        .modulate(noise(3, 0.1), 0.02) 
         .layer(
           src(s0)
         )

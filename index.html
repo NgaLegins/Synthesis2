@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>7 Days - Ultra HD</title>
+  <title>7 Days - SVG Vector</title>
   <style>
     body {
       margin: 0;
@@ -13,23 +13,46 @@
       background-color: black;
       overflow: hidden;
       font-family: Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
-    #hydra-container {
+    /* Container per le scritte */
+    #text-container {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2; /* Sopra le uova */
+      pointer-events: none; /* Lascia passare i click */
+    }
+
+    #dynamic-text {
+      color: white;
+      font-size: 8vmin; /* Dimensione reattiva */
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: center;
+      mix-blend-mode: exclusion; /* Effetto stiloso di fusione (facoltativo) */
+    }
+
+    /* Container SVG */
+    svg {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
       z-index: 1;
     }
 
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-
+    /* OVERLAY INIZIALE */
     #overlay {
       position: absolute;
       top: 0;
@@ -45,18 +68,19 @@
       color: white;
       flex-direction: column;
       transition: opacity 0.5s;
+      pointer-events: auto;
     }
 
     h1 {
-      font-size: 8vmin; /* Scala con la viewport */
+      font-size: 8vmin;
       margin-bottom: 2vh;
       text-transform: uppercase;
       letter-spacing: 0.2em;
-      font-weight: 900; /* Extra Bold */
+      font-weight: 900;
     }
 
     p {
-      color: #ffff00; 
+      color: #ffd700; 
       font-size: 3vmin;
       font-weight: 700;
       letter-spacing: 0.1em;
@@ -69,13 +93,31 @@
       100% { opacity: 1; }
     }
   </style>
-  <script src="https://unpkg.com/hydra-synth"></script>
 </head>
 <body>
 
-  <div id="hydra-container">
-    <canvas id="hydra-canvas"></canvas>
+  <div id="text-container">
+    <div id="dynamic-text"></div>
   </div>
+
+  <svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+    <defs>
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="30" result="blur" />
+        <feColorMatrix in="blur" mode="matrix" values="
+          1 0 0 0 0  
+          0 1 0 0 0  
+          0 0 1 0 0  
+          0 0 0 25 -10" result="goo" />
+        <feBlend in="SourceGraphic" in2="goo" />
+      </filter>
+    </defs>
+
+    <g filter="url(#goo)">
+      <circle id="circle1" cx="50%" cy="50%" r="120" fill="#ffcc00" />
+      <circle id="circle2" cx="50%" cy="50%" r="120" fill="#ffcc00" />
+    </g>
+  </svg>
 
   <div id="overlay">
     <h1>7 Days</h1>
@@ -84,139 +126,116 @@
 
   <script>
     const overlay = document.getElementById('overlay');
-    
+    let isRunning = false;
+    let startTime = 0;
+
+    // Riferimenti agli elementi SVG
+    const circle1 = document.getElementById('circle1');
+    const circle2 = document.getElementById('circle2');
+    const textField = document.getElementById('dynamic-text');
+
+    // SETUP AUDIO
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.4;
+    masterGain.connect(ctx.destination);
+
+    function playSubstanceSound(pitch, duration) {
+      if (ctx.state === 'suspended') ctx.resume();
+      
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth'; 
+      osc.frequency.setValueAtTime(pitch, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(pitch * 0.2, ctx.currentTime + duration);
+
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start();
+      osc.stop(ctx.currentTime + duration + 0.1);
+    }
+
+    // LOGICA DI ANIMAZIONE
+    const holdDuration = 2.0; 
+    const moveDuration = 3.0; 
+    const totalCycle = holdDuration + moveDuration; 
+    let lastState = "initial";
+
+    // Start al click
     overlay.addEventListener('click', () => {
       overlay.style.opacity = 0;
       setTimeout(() => overlay.style.display = 'none', 500);
-
-      initHydraSketch();
+      
+      if (ctx.state === 'suspended') ctx.resume();
+      
+      isRunning = true;
+      startTime = Date.now() / 1000; // Tempo in secondi
+      animate();
     });
 
-    function initHydraSketch() {
-      const hydraCanvas = document.getElementById("hydra-canvas");
-      
-      // --- FIX RISOLUZIONE ESTREMA ---
-      // Recuperiamo la densità pixel reale (es. 2 su MacBook retina, 1.5 su Windows scaled)
-      const dpr = window.devicePixelRatio || 1;
-      
-      const hydra = new Hydra({
-        canvas: hydraCanvas,
-        detectAudio: false,
-        enableStreamCapture: false,
-        // Forziamo le dimensioni interne a coincidere con i pixel fisici
-        width: window.innerWidth * dpr,
-        height: window.innerHeight * dpr,
-        // Questo parametro aiuta Hydra a gestire la densità
-        pixelDensity: dpr 
-      });
 
-      // Listener per il resize che mantiene la nitidezza
-      window.addEventListener('resize', () => {
-        const newDpr = window.devicePixelRatio || 1;
-        setResolution(
-          window.innerWidth * newDpr, 
-          window.innerHeight * newDpr
-        );
-      });
+    function animate() {
+      if (!isRunning) return;
 
-      // --- 1. AUDIO ---
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === 'suspended') ctx.resume();
+      const now = Date.now() / 1000;
+      const time = now - startTime;
+      const cycleTime = time % totalCycle;
 
-      const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.4;
-      masterGain.connect(ctx.destination);
+      // 1. GESTIONE STATO E TESTO
+      let state = cycleTime < holdDuration ? "united" : "divided";
 
-      function playSubstanceSound(pitch, duration) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth'; 
-        osc.frequency.setValueAtTime(pitch, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(pitch * 0.2, ctx.currentTime + duration);
-        gain.gain.setValueAtTime(0.6, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(masterGain);
-        osc.start();
-        osc.stop(ctx.currentTime + duration + 0.1);
-      }
-
-      // --- 2. TESTO (Vettoriale) ---
-      const textCanvas = document.createElement('canvas');
-      const textCtx = textCanvas.getContext('2d');
-
-      // Risoluzione interna mostruosa per il testo
-      textCanvas.width = 4096;
-      textCanvas.height = 4096;
-
-      textCtx.font = '900 250px Helvetica, Arial, sans-serif'; // Font enorme e grassetto
-      textCtx.textAlign = 'center';
-      textCtx.fillStyle = 'white';
-      textCtx.textBaseline = 'middle'; 
-
-      let lastState = "initial"; 
-
-      function updateText(msg) {
-        textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
-        textCtx.fillText(msg, textCanvas.width / 2, textCanvas.height / 2);
-      }
-
-      s0.init({ src: textCanvas });
-
-      // --- 3. LOGICA TEMPORALE ---
-      const holdDuration = 2.0; 
-      const moveDuration = 3.0; 
-      const totalCycle = holdDuration + moveDuration; 
-
-      const getPosition = () => {
-        let cycleTime = time % totalCycle; 
-        if (cycleTime < holdDuration) {
-          return 0;
+      if (state !== lastState) {
+        if (state === "divided") {
+          textField.innerText = "7 DAYS FOR EACH";
+          playSubstanceSound(180, 1.5); 
         } else {
-          let moveProgress = (cycleTime - holdDuration) / moveDuration;
-          return Math.sin(moveProgress * Math.PI) * 0.55; 
+          textField.innerText = "REMEMBER, YOU ARE ONE";
+          playSubstanceSound(55, 2.0); 
         }
+        lastState = state;
       }
 
-      window.update = () => {
-        let cycleTime = time % totalCycle;
-        let state = cycleTime < holdDuration ? "united" : "divided";
-
-        if (state !== lastState) {
-          if (state === "divided") {
-            updateText("7 DAYS FOR EACH");
-            playSubstanceSound(180, 1.5); 
-          } else {
-            updateText("REMEMBER, YOU ARE ONE");
-            playSubstanceSound(55, 2.0); 
-          }
-          lastState = state;
-        }
+      // 2. CALCOLO POSIZIONE
+      let offset = 0;
+      if (state === "divided") {
+        let moveProgress = (cycleTime - holdDuration) / moveDuration;
+        // Sinusoide da 0 a 1 e ritorno a 0
+        let wave = Math.sin(moveProgress * Math.PI);
+        // Distanza massima in pixel (dipende dalla larghezza schermo)
+        // Usiamo il 25% della larghezza dello schermo come escursione massima
+        const maxDist = window.innerWidth * 0.25; 
+        offset = wave * maxDist;
       }
 
-      // --- 4. VISUALS (Nitidezza Massima) ---
+      // 3. AGGIORNAMENTO SVG
+      // Il centro è window.innerWidth / 2
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+
+      // Aggiorniamo le posizioni
+      circle1.setAttribute('cx', centerX - offset);
+      circle1.setAttribute('cy', centerY);
       
-      // shape(..., ..., 0.0001) -> Smoothing vicino allo zero per bordi netti
-      shape(100, 0.48, 0.0001) 
-        .scrollX(() => getPosition() * -1) 
-        .add(
-          shape(100, 0.48, 0.0001)
-          .scrollX(() => getPosition()) 
-        )
-        // thresh(0.5, 0.001) -> Il secondo valore è la sfumatura. 
-        // 0.001 significa "taglio netto", niente sfocatura.
-        .thresh(0.5, 0.001) 
-        
-        .color(1, 0.9, 0) 
-        
-        // Noise molto sottile per evitare banding, ma non sgranatura
-        .modulate(noise(3, 0.1), 0.005) 
-        
-        .layer(
-          src(s0)
-        )
-        .out();
+      circle2.setAttribute('cx', centerX + offset);
+      circle2.setAttribute('cy', centerY);
+
+      // Aggiorniamo il raggio in base alla dimensione dello schermo per responsività
+      // Raggio = 12% della larghezza minima dello schermo
+      const r = Math.min(window.innerWidth, window.innerHeight) * 0.12;
+      circle1.setAttribute('r', r);
+      circle2.setAttribute('r', r);
+
+      requestAnimationFrame(animate);
     }
+
+    // Gestione ridimensionamento finestra
+    window.addEventListener('resize', () => {
+      // SVG gestisce il resize nativamente, ma dobbiamo ricalcolare il raggio nel prossimo frame
+    });
+
   </script>
 </body>
 </html>

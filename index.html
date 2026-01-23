@@ -2,27 +2,32 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>7 Days - Hydra High Res</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>7 Days - Ultra HD</title>
   <style>
     body {
       margin: 0;
       padding: 0;
-      width: 100%;
+      width: 100vw;
       height: 100vh;
       background-color: black;
       overflow: hidden;
       font-family: Helvetica, Arial, sans-serif;
     }
 
-    #hydra-canvas {
+    #hydra-container {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
       z-index: 1;
-      /* Assicura che il rendering CSS sia fluido */
-      image-rendering: -webkit-optimize-contrast;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     #overlay {
@@ -43,24 +48,24 @@
     }
 
     h1 {
-      font-size: 3rem; /* Più grande */
-      margin-bottom: 20px;
+      font-size: 8vmin; /* Scala con la viewport */
+      margin-bottom: 2vh;
       text-transform: uppercase;
-      letter-spacing: 8px;
-      font-weight: bold;
+      letter-spacing: 0.2em;
+      font-weight: 900; /* Extra Bold */
     }
 
     p {
-      color: #ffff00; /* Giallo Substance */
-      font-size: 1.2rem;
-      animation: blink 1s infinite;
-      letter-spacing: 2px;
-      font-weight: bold;
+      color: #ffff00; 
+      font-size: 3vmin;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      animation: blink 0.8s infinite;
     }
 
     @keyframes blink {
       0% { opacity: 1; }
-      50% { opacity: 0.3; }
+      50% { opacity: 0.2; }
       100% { opacity: 1; }
     }
   </style>
@@ -68,7 +73,9 @@
 </head>
 <body>
 
-  <canvas id="hydra-canvas"></canvas>
+  <div id="hydra-container">
+    <canvas id="hydra-canvas"></canvas>
+  </div>
 
   <div id="overlay">
     <h1>7 Days</h1>
@@ -82,35 +89,37 @@
       overlay.style.opacity = 0;
       setTimeout(() => overlay.style.display = 'none', 500);
 
-      // --- INIZIALIZZAZIONE AD ALTA RISOLUZIONE ---
+      initHydraSketch();
+    });
+
+    function initHydraSketch() {
       const hydraCanvas = document.getElementById("hydra-canvas");
       
-      // Calcoliamo la larghezza e altezza reali basate sui pixel fisici del monitor
-      // Questo risolve il problema dello "sgranato" su schermi moderni
-      const width = window.innerWidth * window.devicePixelRatio;
-      const height = window.innerHeight * window.devicePixelRatio;
-
+      // --- FIX RISOLUZIONE ESTREMA ---
+      // Recuperiamo la densità pixel reale (es. 2 su MacBook retina, 1.5 su Windows scaled)
+      const dpr = window.devicePixelRatio || 1;
+      
       const hydra = new Hydra({
         canvas: hydraCanvas,
         detectAudio: false,
         enableStreamCapture: false,
-        width: width,   // Imposta larghezza interna reale
-        height: height, // Imposta altezza interna reale
+        // Forziamo le dimensioni interne a coincidere con i pixel fisici
+        width: window.innerWidth * dpr,
+        height: window.innerHeight * dpr,
+        // Questo parametro aiuta Hydra a gestire la densità
+        pixelDensity: dpr 
       });
 
-      // Gestione del ridimensionamento finestra per mantenere la nitidezza
+      // Listener per il resize che mantiene la nitidezza
       window.addEventListener('resize', () => {
+        const newDpr = window.devicePixelRatio || 1;
         setResolution(
-          window.innerWidth * window.devicePixelRatio, 
-          window.innerHeight * window.devicePixelRatio
+          window.innerWidth * newDpr, 
+          window.innerHeight * newDpr
         );
       });
 
-      runMySketch();
-    });
-
-    function runMySketch() {
-      // --- 1. SETUP AUDIO ---
+      // --- 1. AUDIO ---
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (ctx.state === 'suspended') ctx.resume();
 
@@ -124,26 +133,23 @@
         osc.type = 'sawtooth'; 
         osc.frequency.setValueAtTime(pitch, ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(pitch * 0.2, ctx.currentTime + duration);
-
         gain.gain.setValueAtTime(0.6, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-
         osc.connect(gain);
         gain.connect(masterGain);
         osc.start();
         osc.stop(ctx.currentTime + duration + 0.1);
       }
 
-      // --- 2. SETUP TESTO (Ultra Alta Risoluzione) ---
+      // --- 2. TESTO (Vettoriale) ---
       const textCanvas = document.createElement('canvas');
       const textCtx = textCanvas.getContext('2d');
 
-      // Risoluzione canvas testo molto alta (4k) per evitare aliasing
+      // Risoluzione interna mostruosa per il testo
       textCanvas.width = 4096;
       textCanvas.height = 4096;
 
-      // Font scalato di conseguenza
-      textCtx.font = 'bold 200px Helvetica, Arial, sans-serif'; 
+      textCtx.font = '900 250px Helvetica, Arial, sans-serif'; // Font enorme e grassetto
       textCtx.textAlign = 'center';
       textCtx.fillStyle = 'white';
       textCtx.textBaseline = 'middle'; 
@@ -157,7 +163,7 @@
 
       s0.init({ src: textCanvas });
 
-      // --- 3. LOGICA DI TEMPO ---
+      // --- 3. LOGICA TEMPORALE ---
       const holdDuration = 2.0; 
       const moveDuration = 3.0; 
       const totalCycle = holdDuration + moveDuration; 
@@ -168,7 +174,7 @@
           return 0;
         } else {
           let moveProgress = (cycleTime - holdDuration) / moveDuration;
-          return Math.sin(moveProgress * Math.PI) * 0.5; 
+          return Math.sin(moveProgress * Math.PI) * 0.55; 
         }
       }
 
@@ -188,25 +194,7 @@
         }
       }
 
-      // --- 4. VISUALS ---
-      // shape(lati, raggio, smoothing)
-      // smoothing a 0.001 con alta risoluzione crea bordi molto netti
-      shape(100, 0.45, 0.001)
-        .scrollX(() => getPosition() * -1) 
-        .add(
-          shape(100, 0.45, 0.001)
-          .scrollX(() => getPosition()) 
-        )
-        // Thresh regolato per la nuova risoluzione
-        .thresh(0.5, 0.15) 
-        .color(1, 0.9, 0) 
-        // Noise leggermente ridotto per pulizia visiva
-        .modulate(noise(3, 0.1), 0.02) 
-        .layer(
-          src(s0)
-        )
-        .out();
-    }
-  </script>
-</body>
-</html>
+      // --- 4. VISUALS (Nitidezza Massima) ---
+      
+      // shape(..., ..., 0.0001) -> Smoothing vicino allo zero per bordi netti
+      shape(100, 0.

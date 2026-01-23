@@ -197,4 +197,26 @@
       // --- 4. VISUALS (Nitidezza Massima) ---
       
       // shape(..., ..., 0.0001) -> Smoothing vicino allo zero per bordi netti
-      shape(100, 0.
+      shape(100, 0.48, 0.0001) 
+        .scrollX(() => getPosition() * -1) 
+        .add(
+          shape(100, 0.48, 0.0001)
+          .scrollX(() => getPosition()) 
+        )
+        // thresh(0.5, 0.001) -> Il secondo valore è la sfumatura. 
+        // 0.001 significa "taglio netto", niente sfocatura.
+        .thresh(0.5, 0.001) 
+        
+        .color(1, 0.9, 0) 
+        
+        // Noise molto sottile per evitare banding, ma non sgranatura
+        .modulate(noise(3, 0.1), 0.005) 
+        
+        .layer(
+          src(s0)
+        )
+        .out();
+    }
+  </script>
+</body>
+</html>
